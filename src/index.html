@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Скаут поставщиков — подбор поставщиков продуктов питания</title>
+    <meta name="description" content="Прототип сервиса: найти поставщиков по категории и городу, сравнить по цене, минимальному заказу, доставке и документам, решить, с кем связаться. Демо-данные." />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#f4f6f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <script>
+      try {
+        var t = localStorage.getItem('scout:theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    %CSS%
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot" role="status">Загружаю прототип…</div>
+    </div>
+    <noscript>Для работы прототипа нужен JavaScript.</noscript>
+    %JS%
+  </body>
+</html>

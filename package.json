@@ -1,0 +1,41 @@
+{
+  "name": "supplier-scout",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Скаут поставщиков — прототип сервиса поиска и сравнения поставщиков продуктов питания. Демо на моках (MSW), GitHub Pages.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs dist 4173",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/smoke.mjs",
+    "check": "npm run typecheck && npm test && npm run build && npm run e2e"
+  },
+  "dependencies": {
+    "@fontsource-variable/onest": "^5.3.1",
+    "@tanstack/react-query": "^5.104.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^7.18.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.0",
+    "msw": "^2.15.0",
+    "playwright": "^1.56.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

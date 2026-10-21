@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: Скаут поставщиков — API
+  version: 1.0.0
+  description: |
+    Контракт между интерфейсом и сервером. В демо его целиком реализуют обработчики MSW
+    (src/mocks/handlers.ts), в боевой версии — сервер на FastAPI. Типы TypeScript —
+    src/shared/api/types.ts; при появлении сервера они генерируются из этого файла.
+
+    Главное правило данных: любое значение — это Fact, у которого есть источник (sourceId)
+    и дословная цитата (quote). Значение без источника в карточку не попадает.
+servers:
+  - url: ./api
+    description: Демо (MSW в браузере) и боевой сервер — один и тот же путь
+paths:
+  /settings:
+    get:
+      summary: Настройки — город по умолчанию, компания для писем, веса оценки
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Settings' } } } }
+    put:
+      summary: Изменить настройки
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Settings' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Settings' } } } }
+  /searches/parse:
+    post:
+      summary: Разобрать запрос на фильтры («как понял») без запуска поиска
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [query], properties: { query: { type: string } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ParsedQuery' } } } }
+  /searches:
+    get:
+      summary: Последние поиски
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, properties: { id: { type: string }, query: { type: string }, createdAt: { type: string, format: date-time } } }
+    post:
+      summary: Запустить поиск по подтверждённым фильтрам
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filters]
+              properties:
+                query: { type: string }
+                filters: { $ref: '#/components/schemas/SearchFilters' }
+                weights: { $ref: '#/components/schemas/Weights' }
+      responses:
+        '201': { description: Создан, content: { application/json: { schema: { type: object, properties: { id: { type: string } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /searches/{id}/events:
+    get:
+      summary: Поток прогресса (Server-Sent Events) — шаги и поставщики по мере готовности
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: |
+            text/event-stream. События: step {step, status, detail}, supplier {item: SupplierSummary}, done {total}.
+          content: { text/event-stream: { schema: { $ref: '#/components/schemas/SearchEvent' } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /searches/{id}:
+    get:
+      summary: Результаты поиска с оценками, отсортированные
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SearchResult' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /suppliers:
+    post:
+      summary: Добавить своего поставщика (в бою — по ИНН или ссылке, с автоматической проверкой)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/NewSupplierInput' } } } }
+      responses:
+        '201': { description: Создан, content: { application/json: { schema: { $ref: '#/components/schemas/Supplier' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /suppliers/{id}:
+    get:
+      summary: Карточка поставщика; с ?search= — оценка под этот запрос
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  supplier: { $ref: '#/components/schemas/Supplier' }
+                  summary: { $ref: '#/components/schemas/SupplierSummary' }
+                  filters: { $ref: '#/components/schemas/SearchFilters' }
+                  query: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/Error' }
+  /suppliers/{id}/letter:
+    post:
+      summary: Черновик запроса КП — вопросы собираются из пустых полей карточки
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { searchId: { type: string } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Letter' } } } }
+  /sources/{id}:
+    get:
+      summary: Страница-источник (снимок сайта или выписки), на которой есть цитата
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SourcePage' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /shortlist:
+    get:
+      summary: Шорт-лист со статусами и заметками
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ShortlistEntry' } } } } }
+  /shortlist/{id}:
+    put:
+      summary: Добавить в шорт-лист (с оценкой из поиска)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { searchId: { type: string } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ShortlistEntry' } } } }
+    patch:
+      summary: Статус, следующий шаг, заметка
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { $ref: '#/components/schemas/PipelineStatus' }
+                nextStep: { type: [string, 'null'], format: date }
+                note: { type: string }
+                removeNote: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ShortlistEntry' } } } }
+    delete:
+      summary: Убрать из шорт-листа
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Удалено }
+  /shortlist/export:
+    get:
+      summary: Выгрузка шорт-листа в CSV для Excel (UTF-8 с BOM, разделитель «;»)
+      responses:
+        '200': { description: OK, content: { text/csv: { schema: { type: string } } } }
+  /demo/reset:
+    post:
+      summary: Только демо — сбросить историю, шорт-лист и своих поставщиков
+      responses:
+        '204': { description: Сброшено }
+components:
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+  responses:
+    Error:
+      description: Ошибка
+      content: { application/json: { schema: { type: object, properties: { error: { type: string }, message: { type: string } } } } }
+  schemas:
+    CityId: { type: string, enum: [ekb, chel, perm, tmn, ntagil, msk] }
+    CategoryId: { type: string, enum: [dairy, meat, fish, veg, grocery, drinks, ready, bakery, packaging] }
+    DocKind: { type: string, enum: [declaration, certificate, vet, haccp] }
+    Unit: { type: string, enum: [kg, l, pcs, pack] }
+    PipelineStatus: { type: string, enum: [new, contacted, waiting, offer, contract, rejected] }
+    Fact:
+      type: object
+      description: Значение вместе с источником. status=not_found — честное «не нашли».
+      required: [value, status, method, fetchedAt]
+      properties:
+        value: {}
+        status: { type: string, enum: [confirmed, not_found] }
+        raw: { type: string, description: Как написано в источнике }
+        quote: { type: string, description: Дословная цитата — обязательно есть на странице-источнике }
+        sourceId: { type: string }
+        method: { type: string, enum: [registry, site, manual] }
+        fetchedAt: { type: string, format: date }
+    Price:
+      type: object
+      properties:
+        perUnit: { type: number, description: '₽ за единицу после приведения' }
+        unit: { $ref: '#/components/schemas/Unit' }
+        packPrice: { type: number }
+        packSize: { type: number }
+    Moq:
+      type: object
+      properties:
+        kind: { type: string, enum: [qty, sum] }
+        value: { type: number }
+        unit: { $ref: '#/components/schemas/Unit' }
+    Offer:
+      type: object
+      properties:
+        productId: { type: string }
+        name: { type: string }
+        price: { allOf: [{ $ref: '#/components/schemas/Fact' }], description: 'Fact<Price>' }
+        moq: { allOf: [{ $ref: '#/components/schemas/Fact' }], description: 'Fact<Moq>' }
+    SupplierDoc:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { $ref: '#/components/schemas/DocKind' }
+        number: { type: string }
+        products: { type: array, items: { type: string } }
+        productLabel: { type: string }
+        status: { type: string, enum: [active, expired] }
+        validUntil: { type: [string, 'null'], format: date }
+        sourceId: { type: string }
+        quote: { type: string }
+    Supplier:
+      type: object
+      description: Полная карточка. Все поля в legal, contacts, delivery — Fact.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        tagline: { type: string }
+        kind: { type: string, enum: [producer, distributor, farm] }
+        city: { $ref: '#/components/schemas/CityId' }
+        address: { type: string }
+        website: { type: [string, 'null'] }
+        categories: { type: array, items: { $ref: '#/components/schemas/CategoryId' } }
+        manual: { type: boolean }
+        registryUnavailable: { type: boolean }
+        legal: { type: object, additionalProperties: { $ref: '#/components/schemas/Fact' }, description: 'inn, ogrn, status, registeredAt, okved' }
+        contacts: { type: object, additionalProperties: { $ref: '#/components/schemas/Fact' }, description: 'phone, email, telegram, person' }
+        offers: { type: array, items: { $ref: '#/components/schemas/Offer' } }
+        delivery:
+          type: object
+          properties:
+            cities: { $ref: '#/components/schemas/Fact' }
+            nationwide: { type: boolean }
+            schedule: { $ref: '#/components/schemas/Fact' }
+            daily: { type: boolean }
+            minOrderSum: { $ref: '#/components/schemas/Fact' }
+            cold: { $ref: '#/components/schemas/Fact' }
+            pickup: { type: boolean }
+        documents: { type: array, items: { $ref: '#/components/schemas/SupplierDoc' } }
+        deferral: { $ref: '#/components/schemas/Fact' }
+    SourcePage:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [site, registry, docs] }
+        supplierId: { type: string }
+        title: { type: string }
+        url: { type: string }
+        fetchedAt: { type: string, format: date }
+        blocks:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string, enum: [h, p, li, row] }
+              label: { type: string }
+              text: { type: string }
+    Volume:
+      type: object
+      properties:
+        value: { type: number }
+        unit: { $ref: '#/components/schemas/Unit' }
+        period: { type: string, enum: [day, week, month] }
+    SearchFilters:
+      type: object
+      required: [category, products, city, volume, docs, daily]
+      properties:
+        category: { oneOf: [{ $ref: '#/components/schemas/CategoryId' }, { type: 'null' }] }
+        products: { type: array, items: { type: string } }
+        city: { $ref: '#/components/schemas/CityId' }
+        cityIsDefault: { type: boolean }
+        volume: { oneOf: [{ $ref: '#/components/schemas/Volume' }, { type: 'null' }] }
+        docs: { type: array, items: { $ref: '#/components/schemas/DocKind' } }
+        daily: { type: boolean }
+    ParsedQuery:
+      type: object
+      properties:
+        raw: { type: string }
+        filters: { $ref: '#/components/schemas/SearchFilters' }
+        unknown: { type: array, items: { type: string }, description: Слова, которые разбор не понял }
+    Weights:
+      type: object
+      description: Веса критериев, в сумме 100
+      properties:
+        product: { type: number }
+        delivery: { type: number }
+        legal: { type: number }
+        docs: { type: number }
+        terms: { type: number }
+        fresh: { type: number }
+    Score:
+      type: object
+      properties:
+        total: { type: integer, minimum: 0, maximum: 100 }
+        blocked: { type: boolean, description: Красный флаг «не работать» }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              criterion: { type: string, enum: [product, delivery, legal, docs, terms, fresh] }
+              share: { type: number }
+              points: { type: integer }
+              max: { type: integer }
+              text: { type: string }
+              sourceId: { type: string }
+        flags:
+          type: array
+          items:
+            type: object
+            properties:
+              level: { type: string, enum: [red, amber] }
+              code: { type: string }
+              text: { type: string }
+              sourceId: { type: string }
+    SupplierSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        tagline: { type: string }
+        city: { $ref: '#/components/schemas/CityId' }
+        kind: { type: string }
+        deliversToCity: { type: [boolean, 'null'] }
+        schedule: { type: [string, 'null'] }
+        daily: { type: boolean }
+        keyPrice: { type: [object, 'null'], properties: { name: { type: string }, price: { $ref: '#/components/schemas/Price' } } }
+        moq: { oneOf: [{ $ref: '#/components/schemas/Moq' }, { type: 'null' }] }
+        minOrderSum: { type: [number, 'null'] }
+        activeDocs: { type: integer }
+        expiredDocs: { type: integer }
+        score: { $ref: '#/components/schemas/Score' }
+    SearchResult:
+      type: object
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        query: { type: string }
+        filters: { $ref: '#/components/schemas/SearchFilters' }
+        weights: { $ref: '#/components/schemas/Weights' }
+        candidates: { type: integer }
+        priceFor: { type: [object, 'null'], properties: { productId: { type: string }, name: { type: string } } }
+        items: { type: array, items: { $ref: '#/components/schemas/SupplierSummary' } }
+    SearchEvent:
+      oneOf:
+        - { type: object, properties: { type: { const: step }, step: { type: string, enum: [parse, find, legal, sites, docs, score] }, status: { type: string, enum: [running, done] }, detail: { type: string } } }
+        - { type: object, properties: { type: { const: supplier }, item: { $ref: '#/components/schemas/SupplierSummary' } } }
+        - { type: object, properties: { type: { const: done }, total: { type: integer } } }
+    ShortlistEntry:
+      type: object
+      properties:
+        supplierId: { type: string }
+        name: { type: string }
+        city: { $ref: '#/components/schemas/CityId' }
+        status: { $ref: '#/components/schemas/PipelineStatus' }
+        addedAt: { type: string, format: date-time }
+        nextStep: { type: [string, 'null'], format: date }
+        notes: { type: array, items: { type: object, properties: { id: { type: string }, text: { type: string }, createdAt: { type: string } } } }
+        lastScore: { type: [integer, 'null'] }
+        lastQuery: { type: [string, 'null'] }
+        lastSearchId: { type: [string, 'null'] }
+    Letter:
+      type: object
+      properties:
+        to: { type: [string, 'null'] }
+        subject: { type: string }
+        body: { type: string }
+        questions: { type: array, items: { type: string } }
+    Settings:
+      type: object
+      properties:
+        city: { $ref: '#/components/schemas/CityId' }
+        company: { type: string }
+        weights: { oneOf: [{ $ref: '#/components/schemas/Weights' }, { type: 'null' }] }
+    NewSupplierInput:
+      type: object
+      required: [name, city, categories]
+      properties:
+        name: { type: string }
+        city: { $ref: '#/components/schemas/CityId' }
+        categories: { type: array, items: { $ref: '#/components/schemas/CategoryId' }, minItems: 1 }
+        inn: { type: string, pattern: '^\d{10}(\d{2})?$' }
+        website: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        note: { type: string }
