@@ -19,14 +19,20 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
+  const [innTouched, setInnTouched] = useState(false);
+
+  const errors = {
+    name: name.trim() ? null : 'Укажите название',
+    cats: cats.length ? null : 'Выберите хотя бы одну категорию',
+    inn: !inn || /^\d{10}(\d{2})?$/.test(inn) ? null : `Нужно 10 цифр для организации или 12 для ИП — сейчас ${inn.length}`,
+  };
+  const show = (k: keyof typeof errors) => (tried || (k === 'inn' && innTouched) ? errors[k] : null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return setError('Укажите название');
-    if (!cats.length) return setError('Выберите хотя бы одну категорию');
-    if (inn && !/^\d{10}(\d{2})?$/.test(inn.trim())) return setError('ИНН — 10 цифр для организации или 12 для ИП');
-    setError(null);
+    setTried(true);
+    if (errors.name || errors.cats || errors.inn) return;
     const s = await add.mutateAsync({ name, city, categories: cats, inn, website, phone, email, note });
     toast('Поставщик добавлен — он появится в поиске по его категории', 'good');
     onClose();
@@ -37,6 +43,8 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
     setPhone('');
     setEmail('');
     setNote('');
+    setTried(false);
+    setInnTouched(false);
     navigate(`/supplier/${s.id}`);
   }
 
@@ -45,10 +53,10 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
       <form className="form" onSubmit={submit} noValidate>
         <p className="muted">
           Поставщик, которого вы уже знаете. В боевой версии по ИНН или ссылке на сайт он пройдёт ту же проверку, что и
-          найденные; в демо карточка заполняется вручную и помечается «вручную».
+          найденные; в демо карточка заполняется вручную и помечается «вручную». Обязательны название, город и категория.
         </p>
-        <Field label="Название" htmlFor="add-name">
-          <input id="add-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="ООО «Пример»" required />
+        <Field label="Название" htmlFor="add-name" error={show('name')}>
+          <input id="add-name" className="input" aria-invalid={!!show('name') || undefined} value={name} onChange={(e) => setName(e.target.value)} placeholder="ООО «Пример»" required />
         </Field>
         <div className="form__row">
           <Field label="Город" htmlFor="add-city">
@@ -60,8 +68,18 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
               ))}
             </select>
           </Field>
-          <Field label="ИНН" hint="Необязательно" htmlFor="add-inn">
-            <input id="add-inn" className="input" inputMode="numeric" value={inn} onChange={(e) => setInn(e.target.value.replace(/\D/g, ''))} maxLength={12} />
+          <Field label="ИНН" htmlFor="add-inn" error={show('inn')}>
+            <input
+              id="add-inn"
+              className="input"
+              inputMode="numeric"
+              placeholder="10 или 12 цифр"
+              value={inn}
+              aria-invalid={!!show('inn') || undefined}
+              onBlur={() => setInnTouched(true)}
+              onChange={(e) => setInn(e.target.value.replace(/\D/g, ''))}
+              maxLength={12}
+            />
           </Field>
         </div>
         <fieldset className="field">
@@ -74,6 +92,11 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
               </label>
             ))}
           </div>
+          {show('cats') && (
+            <p className="field__hint field__hint--error" role="alert">
+              {show('cats')}
+            </p>
+          )}
         </fieldset>
         <div className="form__row">
           <Field label="Телефон" htmlFor="add-phone">
@@ -89,11 +112,6 @@ export function AddSupplierDialog({ open, onClose }: { open: boolean; onClose: (
         <Field label="Заметка" htmlFor="add-note">
           <input id="add-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Откуда знаем, с кем говорили" />
         </Field>
-        {error && (
-          <p className="form__error" role="alert">
-            {error}
-          </p>
-        )}
         <div className="form__actions">
           <Button onClick={onClose}>Отмена</Button>
           <Button variant="primary" type="submit" icon="plus" busy={add.isPending}>

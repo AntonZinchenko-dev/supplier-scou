@@ -152,14 +152,32 @@ export const useToast = () => useContext(ToastCtx);
 
 /* ─────────── Поля ─────────── */
 
-export function Field({ label, hint, children, htmlFor }: { label: string; hint?: string; children: ReactNode; htmlFor?: string }) {
+export function Field({
+  label,
+  hint,
+  error,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  hint?: string;
+  /** Ошибка заменяет подсказку и показывается под полем */
+  error?: string | null;
+  children: ReactNode;
+  htmlFor?: string;
+}) {
+  const text = error || hint;
   return (
     <div className="field">
       <label className="field__label" htmlFor={htmlFor}>
         {label}
       </label>
       {children}
-      {hint && <p className="field__hint">{hint}</p>}
+      {text && (
+        <p className={`field__hint ${error ? 'field__hint--error' : ''}`} id={htmlFor ? `${htmlFor}-hint` : undefined} role={error ? 'alert' : undefined}>
+          {text}
+        </p>
+      )}
     </div>
   );
 }
